@@ -41,11 +41,31 @@
           Добавить
         </button>
       </section>
+
       <template v-if="tickers.length > 0">
+        <hr class="w-full border-t border-gray-200 my-4" />
+        <div>
+          <button
+            class="ml-1.5 my-4 inline-flex items-center py-1 px-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none"
+            v-if="page > 1"
+            @click="page = page - 1"
+          >
+            Back
+          </button>
+          <button
+            class="ml-1 my-4 inline-flex items-center py-1 px-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none"
+            v-if="hasNextPage"
+            @click="page = page + 1"
+          >
+            Forward
+          </button>
+          <div>Filter: <input v-model="filter" /></div>
+        </div>
+
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="t in tickers"
+            v-for="t in filteredTickers()"
             :key="t.name"
             @click="select(t)"
             :class="sel === t ? 'border-4' : ''"
@@ -109,7 +129,7 @@
             x="0"
             y="0"
             viewBox="0 0 511.76 511.76"
-            style="enable-background:new 0 0 512 512"
+            style="enable-background: new 0 0 512 512"
             xml:space="preserve"
           >
             <g>
@@ -136,24 +156,48 @@ export default {
       tickers: [],
       sel: null,
       graph: [],
+      page: 1,
+      filter: "",
+      hasNextPage: true,
     };
   },
 
   created() {
-    const tickersData = localStorage.getItem("cryptonomicon-list");
+    const windowData = Object.fromEntries(new URL(window.location).searchParams.entries())
+    if(windowData.filter){
+      this.filter = windowData.filter
+    }
 
-    if(tickersData){
-    this.tickers = JSON.parse(tickersData);
-    this.tickers.forEach(ticker=>{
-      this.subscribeToUpdates(ticker.name);
-    })
+    if(windowData.page){
+      this.page = windowData.page
+    }
+   const tickersData = localStorage.getItem("cryptonomicon-list");
+
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach((ticker) => {
+        this.subscribeToUpdates(ticker.name);
+      });
     }
   },
 
   methods: {
+    filteredTickers() {
+      //1 --- 0,5
+      //2 --- 6,11
+      // (6 * (PAGE -1), 6* PAGE -1)
+      const start = (this.page - 1) * 6;
+      const end = this.page * 6;
 
-    subscribeToUpdates(tickerName){
-       setInterval(async () => {
+      const filteredTickers = this.tickers.filter((ticker) =>
+        ticker.name.includes(this.filter)
+      );
+      this.hasNextPage = filteredTickers.length > end;
+      return filteredTickers.slice(start, end);
+    },
+
+    subscribeToUpdates(tickerName) {
+      setInterval(async () => {
         const f = await fetch(
           `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=2a4d8ced1ab2b35b2e2f871c12dbb97793b0bff6dda269142fccdabc81281ce7`
         );
@@ -171,17 +215,28 @@ export default {
 
     add() {
       const currentTicker = {
-        name: this.ticker,
+        name: this.ticker.toUpperCase(),
         price: "-",
       };
-
-      this.tickers.push(currentTicker);
 
       localStorage.setItem("cryptonomicon-list", JSON.stringify(this.tickers));
 
       this.subscribeToUpdates(currentTicker.name);
-     
-      // this.ticker = "";
+
+      const checkName = (obj) => obj.name == currentTicker.name;
+
+      if (!currentTicker.name) {
+        alert("Cryptocurrency name required");
+        return false;
+      }
+
+      if (!this.tickers.some(checkName)) {
+        this.tickers.push(currentTicker);
+      } else {
+        alert("Already listed");
+      }
+      this.ticker = "";
+      this.filter = "";
     },
 
     normalizeGraph() {
@@ -200,6 +255,24 @@ export default {
     handleDelete(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
     },
+  },
+
+  watch: {
+    filter() {
+      this.page = 1;
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+    page(){
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    }
   },
 };
 </script>
