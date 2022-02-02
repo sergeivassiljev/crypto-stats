@@ -69,7 +69,7 @@
             :key="t.name"
             @click="select(t)"
             :class="{
-              'border-4': selectedTicker === t
+              'border-4': selectedTicker === t,
             }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
@@ -131,7 +131,7 @@
             x="0"
             y="0"
             viewBox="0 0 511.76 511.76"
-            style="enable-background:new 0 0 512 512"
+            style="enable-background: new 0 0 512 512"
             xml:space="preserve"
           >
             <g>
@@ -155,7 +155,7 @@
 // [ ] 5. API error handling | Criticality: 5
 // [ ] 3. Number of documents | Criticality: 4
 // [x] 8. When deleting a ticker, no localStorage is found | Criticality: 4
-// [x] 1. Same code in hours | Criticality: 3
+// [x] 1. Same code in watch | Criticality: 3
 // [ ] 9. localStorage and anonymous tabs | Criticality: 3
 // [ ] 7. The danger chart looks like if there are many prices | Criticality: 2
 // [ ] 10. Magic strings and numbers (URL, 5000ms delay, local storage key, number per page) | Criticality: 1
@@ -163,6 +163,8 @@
 // Parallel
 // [x] Plot broken if value logged everywhere
 // [x] Removing a ticker leaves a choice
+
+import { loadTicker } from "./api.js";
 
 export default {
   name: "App",
@@ -177,7 +179,7 @@ export default {
 
       graph: [],
 
-      page: 1
+      page: 1,
     };
   },
 
@@ -188,7 +190,7 @@ export default {
 
     const VALID_KEYS = ["filter", "page"];
 
-    VALID_KEYS.forEach(key => {
+    VALID_KEYS.forEach((key) => {
       if (windowData[key]) {
         this[key] = windowData[key];
       }
@@ -206,10 +208,9 @@ export default {
 
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
-      this.tickers.forEach(ticker => {
-        this.subscribeToUpdates(ticker.name);
-      });
     }
+
+    setInterval(this.updateTickers, 5000);
   },
 
   computed: {
@@ -222,7 +223,7 @@ export default {
     },
 
     filteredTickers() {
-      return this.tickers.filter(ticker => ticker.name.includes(this.filter));
+      return this.tickers.filter((ticker) => ticker.name.includes(this.filter));
     },
 
     paginatedTickers() {
@@ -242,47 +243,53 @@ export default {
       }
 
       return this.graph.map(
-        price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
     },
 
     pageStateOptions() {
       return {
         filter: this.filter,
-        page: this.page
+        page: this.page,
       };
-    }
+    },
   },
 
   methods: {
-    subscribeToUpdates(tickerName) {
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=ce3fd966e7a1d10d65f907b20bf000552158fd3ed1bd614110baa0ac6cb57a7e`
-        );
-        const data = await f.json();
+    async updateTickers() {
+      if (!this.tickers.length) {
+        return;
+      }
 
-        // currentTicker.price =  data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        this.tickers.find(t => t.name === tickerName).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+      const exchangeData = await loadTicker(this.tickers.map((t) => t.name));
 
-        if (this.selectedTicker?.name === tickerName) {
-          this.graph.push(data.USD);
+      this.tickers.forEach((ticker) => {
+        const price = exchangeData[ticker.name.toUpperCase()];
+
+        if (!price) {
+          ticker.price = "-";
+          return;
         }
-      }, 5000);
-      this.ticker = "";
+
+        const normalizedPrice = 1 / price;
+
+        const formattedPrice =
+          normalizedPrice > 1
+            ? normalizedPrice.toFixed(2)
+            : normalizedPrice.toPrecision(3);
+
+        ticker.price = formattedPrice;
+      });
     },
 
     add() {
       const currentTicker = {
         name: this.ticker,
-        price: "-"
+        price: "-",
       };
 
       this.tickers = [...this.tickers, currentTicker];
       this.filter = "";
-
-      this.subscribeToUpdates(currentTicker.name);
     },
 
     select(ticker) {
@@ -291,11 +298,11 @@ export default {
     },
 
     handleDelete(tickerToRemove) {
-      this.tickers = this.tickers.filter(t => t !== tickerToRemove);
+      this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
       if (this.selectedTicker === tickerToRemove) {
         this.selectedTicker = null;
       }
-    }
+    },
   },
 
   watch: {
@@ -325,7 +332,7 @@ export default {
         document.title,
         `${window.location.pathname}?filter=${value.filter}&page=${value.page}`
       );
-    }
-  }
+    },
+  },
 };
 </script>
